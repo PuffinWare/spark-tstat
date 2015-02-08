@@ -3,6 +3,8 @@
 SYSTEM_MODE(MANUAL);
 
 #include "OledDisplay.h"
+#include "RHT03.h"
+#include "common.h"
 #include "rgbled.h"
 
 // function prototypes
@@ -11,18 +13,16 @@ void drawText();
 void drawTemp();
 void getTemp();
 
-// Define the pins we're going to call pinMode on
-int ledRed = D6;
-int ledBlue = D7;
-int btnUp = D5;
-int btnDn = D4;
-int btnPad = D3;
+int btnUp = D6;
+int btnDn = D5;
+int btnHome = D4;
 
 bool btnUpLatch = false;
 bool btnDnLatch = false;
-bool btnPadLatch = false;
+bool btnHomeLatch = false;
 
-int tmpSensor = A0;
+int tempSensor = A0;
+int tempRhSensor = D3;
 bool startup = true;
 
 int reset = D1;
@@ -36,6 +36,9 @@ bool tempReady = false;
 double temps[] = { 0.0, 0.0, 0.0, 0.0, 0.0 };
 double avgTemp = 0.0;
 
+int rhtTemp = 0;
+int rhtRH = 0;
+
 uint drawMode = 0;
 uint textMode = 0;
 
@@ -43,25 +46,20 @@ unsigned long curTime;
 unsigned long lastTime = 0;
 
 OledDisplay display = OledDisplay(reset, dc, cs);;
+RHT03 rht = RHT03(tempRhSensor, D7);
 
 void setup() {
-  pinMode(ledRed, OUTPUT);
-  pinMode(ledBlue, OUTPUT);
-
-  digitalWrite(ledRed, LOW);
-  digitalWrite(ledBlue, LOW);
-
   pinMode(reset, OUTPUT);
   pinMode(dc, OUTPUT);
   pinMode(cs, OUTPUT);
 
   pinMode(btnUp, INPUT_PULLUP);
   pinMode(btnDn, INPUT_PULLUP);
-  pinMode(btnPad, INPUT_PULLUP);
+  pinMode(btnHome, INPUT_PULLUP);
 
-  Spark.variable("reading", &reading, DOUBLE);
-  Spark.variable("volts", &volts, DOUBLE);
-  Spark.variable("temp", &avgTemp, DOUBLE);
+  // Spark.variable("reading", &reading, DOUBLE);
+  // Spark.variable("volts", &volts, DOUBLE);
+  // Spark.variable("temp", &avgTemp, DOUBLE);
 
   RGB.control(true);
   RGB.color(0, 0, 0);
@@ -73,44 +71,43 @@ void loop() {
 
   curTime = millis();
   // get temp once per second
-  if (lastTime + 1000 < curTime) {
+  if (lastTime + 3000 < curTime) {
     lastTime = curTime;
     getTemp();
     if (tempReady) { // dont draw until we average a few readings
-      RGB.color(255,0,50*tempIdx);
       drawTemp();
     }
   }
 
-  if (digitalRead(btnPad) == LOW) {
-    if (btnPadLatch) { // only draw once per press
+  if (digitalRead(btnHome) == LOW) {
+    if (btnHomeLatch) { // only draw once per press
       drawPattern();
-      btnPadLatch = false;
+      btnHomeLatch = false;
     }
   } else {
-      btnPadLatch = true;
+      btnHomeLatch = true;
   }
 
   if (digitalRead(btnUp) == LOW) {
-    digitalWrite(ledBlue, HIGH);
+    RGB.color(0,0,255);
     if (btnUpLatch) { // only draw once per press
       drawTemp();
       btnUpLatch = false;
     }
   } else {
     btnUpLatch = true;
-    digitalWrite(ledBlue, LOW);
+    // RGB.color(0,0,0);
   }
 
   if (digitalRead(btnDn) == LOW) {
-    digitalWrite(ledRed, HIGH);
+    RGB.color(255,0,0);
     if (btnDnLatch) { // only draw once per press
       drawText();
       btnDnLatch = false;
     }
   } else {
     btnDnLatch = true;
-    digitalWrite(ledRed, LOW);
+    // RGB.color(0,0,0);
   }
 }
 
@@ -216,7 +213,10 @@ void drawText() {
 }
 
 void getTemp() {
-  reading = analogRead(tmpSensor);
+  rht.update();
+  RGB.color(255,255,0);
+
+  reading = analogRead(tempSensor);
   volts = (reading * 3.3) / 4095;
   temps[tempIdx] = (volts - 0.5) * 100;
   tempIdx += 1;
@@ -236,13 +236,26 @@ void getTemp() {
 }
 
 void drawTemp() {
-  display.clear(CLEAR_OLED);
-  display.setFont(1);
+  //display.clear(CLEAR_OLED);
+  display.setFont(0);
+
   double ftemp = avgTemp * 1.8 + 32;
   char tempStr[8];
-  sprintf(tempStr, "%.1ff", ftemp);
+
+  sprintf(tempStr, "%.1ff a", ftemp);
   display.writeText(1, 1, tempStr);
-  sprintf(tempStr, "%.1fc", avgTemp);
+
+  ftemp = rht.getTemp();
+  ftemp = ftemp * 0.18 + 32;
+  sprintf(tempStr, "%.1ff d", ftemp);
   display.writeText(1, 2, tempStr);
+
+  ftemp = rht.getRH();
+  ftemp = ftemp / 10;
+  sprintf(tempStr, "%.1f%%rh", ftemp);
+  display.writeText(1, 3, tempStr);
+
+  sprintf(tempStr, "%d cnt", rht.getIntCount());
+  display.writeText(1, 4, tempStr);
   return;
 }
