@@ -46,7 +46,7 @@ unsigned long curTime;
 unsigned long lastTime = 0;
 
 OledDisplay display = OledDisplay(reset, dc, cs);;
-RHT03 rht = RHT03(tempRhSensor, D7);
+RHT03 rht = RHT03(tempRhSensor);
 
 void setup() {
   pinMode(reset, OUTPUT);
@@ -224,6 +224,7 @@ void getTemp() {
   if (tempIdx == 5) {
     tempIdx = 0;
     tempReady = true;
+    display.clear(CLEAR_OLED);
   }
 
   if (!tempReady) return;
@@ -255,7 +256,5 @@ void drawTemp() {
   sprintf(tempStr, "%.1f%%rh", ftemp);
   display.writeText(1, 3, tempStr);
 
-  sprintf(tempStr, "%d cnt", rht.getIntCount());
-  display.writeText(1, 4, tempStr);
   return;
 }
