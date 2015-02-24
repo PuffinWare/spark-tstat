@@ -4,6 +4,7 @@ SYSTEM_MODE(MANUAL);
 
 #include "OledDisplay.h"
 #include "RHT03.h"
+#include "TMP3x.h"
 #include "common.h"
 #include "rgbled.h"
 
@@ -15,43 +16,22 @@ void getTemp();
 
 int btnUp = D6;
 int btnDn = D5;
-int btnHome = D4;
+int btnHome = D3;
 
 bool btnUpLatch = false;
 bool btnDnLatch = false;
 bool btnHomeLatch = false;
 
-int tempSensor = A0;
-int tempRhSensor = D3;
-bool startup = true;
-
-int reset = D1;
-int cs = D0;
-int dc = D2;
-
-double reading = 0.0;
-double volts = 0.0;
-uint tempIdx = 0;
-bool tempReady = false;
-double temps[] = { 0.0, 0.0, 0.0, 0.0, 0.0 };
 double avgTemp = 0.0;
-
-int rhtTemp = 0;
-int rhtRH = 0;
 
 uint drawMode = 0;
 uint textMode = 0;
 
-unsigned long curTime;
-unsigned long lastTime = 0;
-
-OledDisplay display = OledDisplay(reset, dc, cs);;
-RHT03 rht = RHT03(tempRhSensor);
+OledDisplay display = OledDisplay(D1, D2, D0);;
+RHT03 rht = RHT03(D4, D7);
+TMP3x tmp36 = TMP3x(A0, 10, 1000);
 
 void setup() {
-  pinMode(reset, OUTPUT);
-  pinMode(dc, OUTPUT);
-  pinMode(cs, OUTPUT);
 
   pinMode(btnUp, INPUT_PULLUP);
   pinMode(btnDn, INPUT_PULLUP);
@@ -68,16 +48,18 @@ void setup() {
 }
 
 void loop() {
-
-  curTime = millis();
-  // get temp once per second
-  if (lastTime + 3000 < curTime) {
-    lastTime = curTime;
-    getTemp();
-    if (tempReady) { // dont draw until we average a few readings
-      drawTemp();
-    }
+  tmp36.poll();
+  if (rht.poll()) {
+    drawTemp();
   }
+
+  // curTime = millis();
+  // // get temp once per second
+  // if (lastTime + 3000 < curTime) {
+  //   lastTime = curTime;
+  //   display.clear(CLEAR_OLED);
+  //   drawTemp();
+  // }
 
   if (digitalRead(btnHome) == LOW) {
     if (btnHomeLatch) { // only draw once per press
@@ -85,7 +67,7 @@ void loop() {
       btnHomeLatch = false;
     }
   } else {
-      btnHomeLatch = true;
+    btnHomeLatch = true;
   }
 
   if (digitalRead(btnUp) == LOW) {
@@ -96,7 +78,6 @@ void loop() {
     }
   } else {
     btnUpLatch = true;
-    // RGB.color(0,0,0);
   }
 
   if (digitalRead(btnDn) == LOW) {
@@ -107,11 +88,34 @@ void loop() {
     }
   } else {
     btnDnLatch = true;
-    // RGB.color(0,0,0);
   }
 }
 
 void initStat() {
+}
+
+void drawTemp() {
+  //display.clear(CLEAR_OLED);
+  display.setFont(0);
+  char tempStr[8];
+
+  double ftemp = tmp36.getTempF();
+  ftemp = (ftemp / 10);
+  sprintf(tempStr, "%.1ff a", ftemp);
+  display.writeText(1, 1, tempStr);
+
+  ftemp = rht.getTempF();
+  ftemp = ftemp / 10;
+  sprintf(tempStr, "%.1ff d", ftemp);
+  display.writeText(1, 2, tempStr);
+
+  ftemp = rht.getRH();
+  ftemp = ftemp / 10;
+  sprintf(tempStr, "%.1f%%rh", ftemp);
+  display.writeText(1, 3, tempStr);
+
+  sprintf(tempStr, "%d.%d  ", rht.getIntCount(), rht.getIgnCount());
+  display.writeText(1, 4, tempStr);
 }
 
 void drawPattern() {
@@ -207,54 +211,7 @@ void drawText() {
   }
 
   textMode += 1;
-  if (textMode > 2) {
+  if (textMode > 1) {
     textMode = 0;
   }
-}
-
-void getTemp() {
-  rht.update();
-  RGB.color(255,255,0);
-
-  reading = analogRead(tempSensor);
-  volts = (reading * 3.3) / 4095;
-  temps[tempIdx] = (volts - 0.5) * 100;
-  tempIdx += 1;
-
-  if (tempIdx == 5) {
-    tempIdx = 0;
-    tempReady = true;
-    display.clear(CLEAR_OLED);
-  }
-
-  if (!tempReady) return;
-
-  double totTemp = 0.0;
-  for(uint i=0; i<5; i++) {
-    totTemp += temps[i];
-  }
-  avgTemp = totTemp/5;
-}
-
-void drawTemp() {
-  //display.clear(CLEAR_OLED);
-  display.setFont(0);
-
-  double ftemp = avgTemp * 1.8 + 32;
-  char tempStr[8];
-
-  sprintf(tempStr, "%.1ff a", ftemp);
-  display.writeText(1, 1, tempStr);
-
-  ftemp = rht.getTemp();
-  ftemp = ftemp * 0.18 + 32;
-  sprintf(tempStr, "%.1ff d", ftemp);
-  display.writeText(1, 2, tempStr);
-
-  ftemp = rht.getRH();
-  ftemp = ftemp / 10;
-  sprintf(tempStr, "%.1f%%rh", ftemp);
-  display.writeText(1, 3, tempStr);
-
-  return;
 }
