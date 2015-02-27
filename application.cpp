@@ -2,11 +2,15 @@
 #include "application.h"
 SYSTEM_MODE(MANUAL);
 
-#include "OledDisplay.h"
+#include "rgbled.h"
+
 #include "RHT03.h"
 #include "TMP3x.h"
+#include "OledDisplay.h"
+#include "font_lcd6x8.h"
+#include "font_lcd11x16.h"
+#include "font_12x16_bold.h"
 #include "common.h"
-#include "rgbled.h"
 
 // function prototypes
 void drawPattern();
@@ -30,6 +34,10 @@ uint textMode = 0;
 OledDisplay display = OledDisplay(D1, D2, D0);;
 RHT03 rht = RHT03(D4, D7);
 TMP3x tmp36 = TMP3x(A0, 10, 1000);
+
+const font_t* font_lcdSm = parseFont(FONT_LCD6X8);
+const font_t* font_lcdLg = parseFont(FONT_LCD11X16);
+const font_t* font_bold  = parseFont(FONT_12X16_BOLD);
 
 void setup() {
 
@@ -95,27 +103,29 @@ void initStat() {
 }
 
 void drawTemp() {
-  //display.clear(CLEAR_OLED);
-  display.setFont(0);
+  display.clear(CLEAR_OLED);
+  display.setFont(font_lcdLg);
   char tempStr[8];
 
   double ftemp = tmp36.getTempF();
   ftemp = (ftemp / 10);
-  sprintf(tempStr, "%.1ff a", ftemp);
-  display.writeText(1, 1, tempStr);
+
+  sprintf(tempStr, "%.1f\x7f", ftemp);
+  display.writeText(0, 0, tempStr);
 
   ftemp = rht.getTempF();
   ftemp = ftemp / 10;
-  sprintf(tempStr, "%.1ff d", ftemp);
-  display.writeText(1, 2, tempStr);
+  sprintf(tempStr, "%.1f\x7f", ftemp);
+  display.writeText(0, 1, tempStr);
 
   ftemp = rht.getRH();
   ftemp = ftemp / 10;
-  sprintf(tempStr, "%.1f%%rh", ftemp);
-  display.writeText(1, 3, tempStr);
+  sprintf(tempStr, "%.1f%%", ftemp);
+  display.writeText(0, 2, tempStr);
 
-  sprintf(tempStr, "%d.%d  ", rht.getIntCount(), rht.getIgnCount());
-  display.writeText(1, 4, tempStr);
+  // sprintf(tempStr, "%d.%d  ", rht.getIntCount(), rht.getIgnCount());
+  // display.writeText(1, 4, tempStr);
+  display.display();
 }
 
 void drawPattern() {
@@ -194,24 +204,29 @@ void drawPattern() {
 
 void drawText() {
   display.clear(CLEAR_OLED);
-  display.setFont(textMode);
+  // display.setFont(textMode);
   switch (textMode) {
     case 0: // small
     case 1: // med
-      RGB.color(textMode==0?255:0, textMode==0?0:255, 0);
+    case 2: // bold
+      // RGB.color(textMode==0?255:0, textMode==0?0:255, 0);
       display.writeText(0, 0, "12345");
-      display.writeText(1, 1, "67890");
-      display.writeText(2, 2, "Hello");
-      if (textMode == 0) display.writeText(3, 3, "World");
+      display.writeText(0, 1, "Hello");
+      display.writeText(0, 2, "World");
       break;
-    case 2: // large
-      RGB.color(0,0,255);
+    case 3: // large
+    case 4:
+    case 5:
+      // RGB.color(0,0,255);
       display.writeText(0, 0, "12345");
+      if (textMode < 5) {
+        display.writeText(0, 1, "67890");
+      }
       break;
   }
 
   textMode += 1;
-  if (textMode > 1) {
+  if (textMode > 5) {
     textMode = 0;
   }
 }
