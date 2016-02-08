@@ -22,15 +22,17 @@ Cellar::Cellar() {
   this->font_lcdSm = parseFont(FONT_LCD6X8);
   this->font_lcdLg = parseFont(FONT_LCD11X16);
 
-  this->display = new OledDisplay(D1, D2, D0);
+  this->display = new OledDisplay(A7, A6, A2);
   this->display->begin();
 
-  this->rht = new RHT03(D3);
+  this->rht = new RHT03(A0);
+  this->tmp = new TMP102();
+//  this->hih = new HIH6130(0x27);
 
   using namespace std::placeholders;
   this->btnHome = new ButtonInterrupt(D4, 100, std::bind(&Cellar::handleButtonHome, this, _1), 2000, 250);
-  this->btnUp = new ButtonInterrupt(D6, 100, std::bind(&Cellar::handleButtonUp, this, _1), 2000, 250);
-  this->btnDn = new ButtonInterrupt(D5, 100, std::bind(&Cellar::handleButtonDn, this, _1), 2000, 250);
+  this->btnUp = new ButtonInterrupt(D3, 100, std::bind(&Cellar::handleButtonUp, this, _1), 2000, 250);
+  this->btnDn = new ButtonInterrupt(D2, 100, std::bind(&Cellar::handleButtonDn, this, _1), 2000, 250);
 }
 
 void Cellar::loop() {
@@ -39,6 +41,14 @@ void Cellar::loop() {
     if (drawMode == DRAW_CUR_TEMP) {
       drawTemp();
     }
+  }
+
+//  if (hih->poll()) {
+//    drawHihTemp();
+//  }
+
+  if (tmp->poll()) {
+    drawAltTemp();
   }
 
   btnHome->poll();
@@ -50,7 +60,6 @@ void Cellar::getTemp() {
   curTemp = rht->getTempF();
   curRH = rht->getRH();
 }
-
 
 void Cellar::drawTemp() {
   display->clear(CLEAR_BUFF);
@@ -86,10 +95,11 @@ void Cellar::drawTemp() {
   display->writeText(6, 5, curTime, -3);
 
   sprintf(tempStr, "%d", setTemp);
-  display->writeText(8, 0, tempStr, 4);
+  display->writeText(8, 1, tempStr, 4);
   sprintf(tempStr, "%d", setRH);
-  display->writeText(8, 2, tempStr, 4);
+  display->writeText(8, 3, tempStr, 4);
 
+  drawAltTemp();
   display->display();
 }
 
@@ -97,9 +107,38 @@ void Cellar::drawSetTemp() {
   char tempStr[8];
 
   sprintf(tempStr, "%d", setTemp);
-  display->writeText(8, 0, tempStr, 4);
+  display->writeText(8, 1, tempStr, 4);
   sprintf(tempStr, "%d", setRH);
-  display->writeText(8, 2, tempStr, 4);
+  display->writeText(8, 3, tempStr, 4);
+
+  display->display();
+}
+
+void Cellar::drawHihTemp() {
+  char tempStr[8];
+  int ftemp = hih->getTempF();
+  int fdec = ftemp % 10;
+  ftemp = ftemp / 10;
+  int rh = hih->getRH();
+  int rhdec = rh % 10;
+  rh = rh / 10;
+
+  sprintf(tempStr, "%d.%d", ftemp, fdec);
+  display->writeText(6, 0, tempStr, 0);
+  sprintf(tempStr, "%d.%d", rh, rhdec);
+  display->writeText(6, 2, tempStr, 0);
+
+  display->display();
+}
+
+void Cellar::drawAltTemp() {
+  char tempStr[8];
+  int ftemp = tmp->getTempF();
+  int fdec = ftemp % 10;
+  ftemp = ftemp / 10;
+
+  sprintf(tempStr, "%d.%d", ftemp, fdec);
+  display->writeText(6, 0, tempStr, 0);
 
   display->display();
 }

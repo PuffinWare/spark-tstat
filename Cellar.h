@@ -3,6 +3,8 @@
 
 #include "common.h"
 #include "RHT03.h"
+#include "HIH6130.h"
+#include "TMP102.h"
 #include "ButtonInterrupt.h"
 #include "OledDisplay.h"
 
@@ -24,6 +26,8 @@ private:
   font_t* font_lcdLg;
   OledDisplay *display;
   RHT03 *rht;
+  TMP102 *tmp;
+  HIH6130 *hih;
   ButtonInterrupt *btnHome;
   ButtonInterrupt *btnUp;
   ButtonInterrupt *btnDn;
@@ -32,6 +36,8 @@ private:
   void drawText();
   void drawTemp();
   void drawSetTemp();
+  void drawHihTemp();
+  void drawAltTemp();
   void getTemp();
   void handleButtonHome(int mode);
   void handleButtonUp(int mode);
