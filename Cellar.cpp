@@ -25,9 +25,11 @@ Cellar::Cellar() {
   this->display = new OledDisplay(A7, A6, A2);
   this->display->begin();
 
-  this->rht = new RHT03(A0);
-  this->tmp = new TMP102();
-//  this->hih = new HIH6130(0x27);
+  // update every 500ms, adjust -1.5deg
+  this->hih = new HIH6130(0x27, 500, -15);
+
+  this->ds2482 = new DS2482();
+  this->ds18b20 = new DS18B20(this->ds2482);
 
   using namespace std::placeholders;
   this->btnHome = new ButtonInterrupt(D4, 100, std::bind(&Cellar::handleButtonHome, this, _1), 2000, 250);
@@ -36,20 +38,15 @@ Cellar::Cellar() {
 }
 
 void Cellar::loop() {
-  if (rht->poll()) {
+  if (hih->poll()) {
     getTemp();
     if (drawMode == DRAW_CUR_TEMP) {
       drawTemp();
     }
   }
 
-//  if (hih->poll()) {
-//    drawHihTemp();
-//  }
-
-  if (tmp->poll()) {
-    drawAltTemp();
-  }
+//  ds2482->poll();
+  ds18b20->poll();
 
   btnHome->poll();
   btnUp->poll();
@@ -57,8 +54,8 @@ void Cellar::loop() {
 }
 
 void Cellar::getTemp() {
-  curTemp = rht->getTempF();
-  curRH = rht->getRH();
+  curTemp = hih->getTempF();
+  curRH = hih->getRH();
 }
 
 void Cellar::drawTemp() {
@@ -114,26 +111,9 @@ void Cellar::drawSetTemp() {
   display->display();
 }
 
-void Cellar::drawHihTemp() {
-  char tempStr[8];
-  int ftemp = hih->getTempF();
-  int fdec = ftemp % 10;
-  ftemp = ftemp / 10;
-  int rh = hih->getRH();
-  int rhdec = rh % 10;
-  rh = rh / 10;
-
-  sprintf(tempStr, "%d.%d", ftemp, fdec);
-  display->writeText(6, 0, tempStr, 0);
-  sprintf(tempStr, "%d.%d", rh, rhdec);
-  display->writeText(6, 2, tempStr, 0);
-
-  display->display();
-}
-
 void Cellar::drawAltTemp() {
   char tempStr[8];
-  int ftemp = tmp->getTempF();
+  int ftemp = ds18b20->getTempF();
   int fdec = ftemp % 10;
   ftemp = ftemp / 10;
 
@@ -152,6 +132,7 @@ void Cellar::handleButtonHome(int mode) {
     case FIRST:
       digitalWrite(D7, HIGH);
       btnHomeToggle = true;
+      ds18b20->update(0);
       break;
 
     case REPEAT:
@@ -167,6 +148,7 @@ void Cellar::handleButtonHome(int mode) {
 void Cellar::handleButtonUp(int mode) {
   switch(mode) {
     case FIRST:
+      ds18b20->update(1);
     case REPEAT:
       setTemp++;
       drawSetTemp();
@@ -180,6 +162,7 @@ void Cellar::handleButtonUp(int mode) {
 void Cellar::handleButtonDn(int mode) {
   switch(mode) {
     case FIRST:
+      ds18b20->update(2);
     case REPEAT:
       setTemp--;
       drawSetTemp();

@@ -2,9 +2,9 @@
 #define STAT_CELLAR_H
 
 #include "common.h"
-#include "RHT03.h"
 #include "HIH6130.h"
-#include "TMP102.h"
+#include "DS2482.h"
+#include "DS18B20.h"
 #include "ButtonInterrupt.h"
 #include "OledDisplay.h"
 
@@ -25,9 +25,9 @@ private:
   font_t* font_lcdSm;
   font_t* font_lcdLg;
   OledDisplay *display;
-  RHT03 *rht;
-  TMP102 *tmp;
   HIH6130 *hih;
+  DS2482 *ds2482;
+  DS18B20 *ds18b20;
   ButtonInterrupt *btnHome;
   ButtonInterrupt *btnUp;
   ButtonInterrupt *btnDn;
