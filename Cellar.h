@@ -20,9 +20,11 @@ typedef struct {
 } CELLAR_CONFIG;
 
 typedef enum CELLAR_DISPLAY_MODE {
-  CELLAR_NORMAL, // None specified
+  CELLAR_MAIN, // None specified
   CELLAR_SET_TEMP,
   CELLAR_STATS,
+  CELLAR_STATS_RUN,
+  CELLAR_STATS_IDLE,
 } CELLAR_DISPLAY_MODE;
 
 class Cellar {
@@ -34,17 +36,20 @@ public:
 private:
   CELLAR_CONFIG config;
   bool enabled;
+  bool updateNeeded;
   int curRH;
   int curTemp[NUM_SENSORS];
   int avgTemp;   // the instant average of all the temp sensors
   Averager *histAvgTemp; // historical average over time
 
   ulong startTime;  //! Time the pump was turned on
-  int curRunTime;  //! How long in the current state
+  int curDuration;  //! How long in the current state
   Averager *avgRunTime; //! Average run time for the pump
   Averager *avgIdleTime; //! Average run time for the pump
 
-  uint drawMode;
+  CELLAR_DISPLAY_MODE drawMode;
+  CELLAR_DISPLAY_MODE nextMode;
+  ulong waitTime;     //! Wait time
   bool btnToggle;
 
   font_t* font_lcdSm;
@@ -58,12 +63,16 @@ private:
   ButtonInterrupt *btnDn;
 
   void writeConfig();
+  void changeMode(ulong wait, CELLAR_DISPLAY_MODE next);
   void getTemp();
   void checkTemp();
   void enable();
   void disable();
-  void drawTemp();
-  void drawSetTemp(bool update);
+  void draw();
+  void drawMain();
+  void drawSetTemp();
+  void drawStats();
+  void drawStatsLog(bool idle);
   void handleButtonHome(int mode);
   void handleButtonUp(int mode);
   void handleButtonDn(int mode);

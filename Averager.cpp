@@ -1,9 +1,12 @@
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
 #include "Averager.h"
 
 Averager::Averager(int size) {
   maxSize = size;
   values = (int*)malloc(sizeof(int) * size);
+  memset(values, 0, sizeof(int) * size);
   curSize = 0;
   idx = 0;
   max = 0;
@@ -11,7 +14,11 @@ Averager::Averager(int size) {
 
 bool Averager::addValue(int value) {
   curSize += curSize==maxSize ? 0 : 1;
-  values[idx] = value;
+  // Want values pushed in for historical display
+  for (int i=curSize-1; i>0; i--) {
+    values[i] = values[i-1];
+  }
+  values[0] = value;
   last = value;
   if (value > max) {
     max = value;

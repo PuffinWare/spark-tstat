@@ -13,6 +13,7 @@ public:
   int getMax()  { return max; }
   bool addValue(int value);
   bool isFull() { return curSize == maxSize; }
+  int getValue(int idx) const { return values[idx]; }
 
 private:
   int *values;
@@ -22,11 +23,7 @@ private:
   int average;
   int last;
   int max;
-public:
 
-  int *getValues() const {
-    return values;
-  }
 };
 
 #endif // AVERAGER_H

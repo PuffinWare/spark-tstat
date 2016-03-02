@@ -10,17 +10,21 @@
 #include <functional>
 
 //#define CELLAR_DEBUG 1
+#define AVERAGE_CNT 10
 
 Cellar::Cellar() {
   this->enabled = false;
   this->curRH = 0;
-  this->curRunTime = 0;
+  this->curDuration = 0;
+  this->waitTime = 1000;
   this->startTime = millis();
   this->btnToggle = false;
-  this->drawMode = CELLAR_NORMAL;
-  this->histAvgTemp = new Averager(20);
-  this->avgRunTime = new Averager(20);
-  this->avgIdleTime = new Averager(20);
+  this->updateNeeded = false;
+  this->drawMode = CELLAR_MAIN;
+  this->nextMode = CELLAR_MAIN;
+  this->histAvgTemp = new Averager(AVERAGE_CNT * 2);
+  this->avgRunTime = new Averager(AVERAGE_CNT);
+  this->avgIdleTime = new Averager(AVERAGE_CNT);
 
   this->font_lcdSm = parseFont(FONT_LCD6X8);
   this->font_lcdLg = parseFont(FONT_LCD11X16);
@@ -69,7 +73,7 @@ void Cellar::writeConfig() {
 }
 
 void Cellar::loop() {
-  curRunTime = (millis() - startTime) / 1000;
+  curDuration = (millis() - startTime) / 1000;
 
   btnHome->poll();
   btnUp->poll();
@@ -78,10 +82,26 @@ void Cellar::loop() {
   if (ds18b20->poll()) {
     getTemp();
     checkTemp();
-    if (drawMode == CELLAR_NORMAL) {
-      drawTemp();
+    if (drawMode == CELLAR_MAIN) {
+      updateNeeded = true;
     }
   }
+
+  if (waitTime > 0 && (millis() > waitTime)) {
+    updateNeeded = true;
+    drawMode = nextMode;
+    waitTime = 0;
+  }
+
+  if (updateNeeded) {
+    updateNeeded = false;
+    draw();
+  }
+}
+
+void Cellar::changeMode(ulong wait, CELLAR_DISPLAY_MODE next) {
+  waitTime = millis() + wait;
+  nextMode = next;
 }
 
 void Cellar::getTemp() {
@@ -123,51 +143,67 @@ void Cellar::checkTemp() {
 void Cellar::enable() {
   enabled = true;
   digitalWrite(D7, HIGH);
-  avgIdleTime->addValue(curRunTime);
+  avgIdleTime->addValue(curDuration);
   startTime = millis();
 }
 
 void Cellar::disable() {
   enabled = false;
   digitalWrite(D7, LOW);
-  avgRunTime->addValue(curRunTime);
+  avgRunTime->addValue(curDuration);
   startTime = millis();
 }
 
-void Cellar::drawTemp() {
+void Cellar::draw() {
   display->clear(CLEAR_BUFF);
+  switch (drawMode) {
+    case CELLAR_MAIN: drawMain(); break;
+    case CELLAR_SET_TEMP: drawSetTemp(); break;
+    case CELLAR_STATS: drawStats(); break;
+    case CELLAR_STATS_IDLE: drawStatsLog(true); break;
+    case CELLAR_STATS_RUN: drawStatsLog(false); break;
+  }
+  display->display();
+}
 
+void Cellar::drawMain() {
+  char tempStr[10];
+  int tVal;
+  int tDec;
+
+  // Current temp
+  tVal = avgTemp / 10;
+  tDec = avgTemp % 10;
   display->setFont(font_lcdLg);
-  char tempStr[20];
-
-  int ftemp = avgTemp / 10;
-  int fdec = avgTemp % 10;
-
-  display->setFont(font_lcdLg);
-  sprintf(tempStr, "%d.", ftemp);
+  sprintf(tempStr, "%d", tVal);
   display->writeText(0, 0, tempStr);
   display->setFont(font_lcdSm);
-  sprintf(tempStr, "%d", fdec);
-  display->writeText(5, 1, tempStr);
+  sprintf(tempStr, "%d", tDec);
+  display->writeText(4, 1, tempStr);
 
-  int rh = curRH / 10;
-  int rhdec = curRH % 10;
+  // Current RH
+  tVal = curRH / 10;
+  tDec = curRH % 10;
   display->setFont(font_lcdLg);
-  sprintf(tempStr, "%d.", rh);
+  sprintf(tempStr, "%d", tVal);
   display->writeText(0, 1, tempStr);
   display->setFont(font_lcdSm);
-  sprintf(tempStr, "%d%%", rhdec);
-  display->writeText(5, 3, tempStr);
+  sprintf(tempStr, "%d%%", tDec);
+  display->writeText(4, 3, tempStr);
 
-  drawSetTemp(false);
+  // Set temp
+  tVal = config.setTemp / 10;
+  tDec = config.setTemp % 10;
+  display->setFont(font_lcdSm);
+  sprintf(tempStr, "%d.%d", tVal, tDec);
+  display->writeText(6, 0, tempStr, 4);
 
   display->setFont(font_lcdSm);
   for (int i=0; i<NUM_SENSORS; i++) {
-    ftemp = curTemp[i];
-    fdec = ftemp % 10;
-    ftemp = ftemp / 10;
+    tVal = curTemp[i] / 10;
+    tDec = curTemp[i] % 10;
 
-    sprintf(tempStr, "%d.%d", ftemp, fdec);
+    sprintf(tempStr, "%d.%d", tVal, tDec);
     switch(i) {
       case 0:
         display->writeText(0, 4, tempStr);
@@ -182,7 +218,7 @@ void Cellar::drawTemp() {
 
   // Duration fields
   display->setFont(font_lcdSm);
-  getDuration3char(curRunTime, tempStr);
+  getDuration3char(curDuration, tempStr);
   display->writeText(7, 1, tempStr, 4, enabled);
 
   getDuration3char(avgIdleTime->getAverage(), tempStr);
@@ -190,38 +226,120 @@ void Cellar::drawTemp() {
 
   getDuration3char(avgRunTime->getAverage(), tempStr);
   display->writeText(7, 3, tempStr, 4);
-
-  display->display();
 }
 
-void Cellar::drawSetTemp(bool update) {
+void Cellar::drawSetTemp() {
   char tempStr[8];
-  int ftemp = config.setTemp / 10;
-  int fdec = config.setTemp % 10;
-  display->setFont(font_lcdSm);
-  sprintf(tempStr, "%d.%d", ftemp, fdec);
-  display->writeText(6, 0, tempStr, 4);
+  int tVal;
+  int tDec;
 
-  if (update) {
-    display->display();
+  display->setFont(font_lcdSm);
+  display->writeText(0, 0, "SET", 0, true);
+
+  tVal = config.setTemp / 10;
+  tDec = config.setTemp % 10;
+  display->setFont(font_lcdLg);
+  sprintf(tempStr, "%2d", tVal);
+  display->writeText(3, 1, tempStr);
+  display->setFont(font_lcdSm);
+  display->writeText(0, 2, "Temp:", 0);
+  sprintf(tempStr, "%d", tDec);
+  display->writeText(9, 3, tempStr, 3);
+
+  tVal = config.hysteresis / 10;
+  tDec = config.hysteresis % 10;
+  display->setFont(font_lcdLg);
+  sprintf(tempStr, "%2d", tVal);
+  display->writeText(3, 2, tempStr);
+  display->setFont(font_lcdSm);
+  display->writeText(0, 4, "Hyst:", 0);
+  sprintf(tempStr, "%d", tDec);
+  display->writeText(9, 5, tempStr, 3);
+}
+
+/*!
+ * STATS
+ *     RUN IDL
+ * Cur     18m
+ * Max 32m  4h
+ * Avg 30m  2h
+ * Lst 28s 45m
+ */
+void Cellar::drawStats() {
+  char tempStr[4];
+
+  display->setFont(font_lcdSm);
+  display->writeText(0, 0, "STATS", 0, true);
+  display->writeText(4, 1, "RUN");
+  display->writeText(7, 1, "IDL", 4);
+
+  display->writeText(0, 2, "Cur");
+  getDuration3char(curDuration, tempStr);
+  if (enabled) {
+    display->writeText(4, 2, tempStr, 0, true);
+  } else {
+    display->writeText(7, 2, tempStr, 4, false);
+  }
+
+  display->writeText(0, 3, "Max");
+  getDuration3char(avgRunTime->getMax(), tempStr);
+  display->writeText(4, 3, tempStr);
+  getDuration3char(avgIdleTime->getMax(), tempStr);
+  display->writeText(7, 3, tempStr, 4);
+
+  display->writeText(0, 4, "Avg");
+  getDuration3char(avgRunTime->getAverage(), tempStr);
+  display->writeText(4, 4, tempStr);
+  getDuration3char(avgIdleTime->getAverage(), tempStr);
+  display->writeText(7, 4, tempStr, 4);
+
+  display->writeText(0, 5, "Lst");
+  getDuration3char(avgRunTime->getLast(), tempStr);
+  display->writeText(4, 5, tempStr);
+  getDuration3char(avgIdleTime->getLast(), tempStr);
+  display->writeText(7, 5, tempStr, 4);
+}
+
+/*!
+ * IDLE  pg 1
+ *  123  123
+ *  123  123
+ *  123  123
+ *  123  123
+ *  123  123
+ */
+void Cellar::drawStatsLog(bool idle) {
+  char tempStr[4];
+  Averager *source = idle ? avgIdleTime : avgRunTime;
+
+  display->setFont(font_lcdSm);
+  display->writeText(0, 0, idle?"IDLE":"RUN", 0, true);
+  display->writeText(6, 0, "Pg:");
+  display->writeText(9, 0, "1");
+  for (int i=0; i<2; i++) {
+    for (int j=0; j<5; j++) {
+      getDuration3char(source->getValue(i*5+j), tempStr);
+      display->writeText(i*5 + 1, j+1, tempStr);
+    }
   }
 }
 
 void Cellar::handleButtonHome(int mode) {
   switch(mode) {
     case UP:
-      digitalWrite(D7, LOW);
+      changeMode(10000, CELLAR_MAIN); break;
       break;
 
     case FIRST:
-      digitalWrite(D7, HIGH);
-      btnToggle = true;
-      ds18b20->update(0);
-      break;
-
     case REPEAT:
-      digitalWrite(D7, btnToggle ? HIGH : LOW);
-      btnToggle = !btnToggle;
+      updateNeeded = true;
+      switch(drawMode) {
+        case CELLAR_MAIN: changeMode(0, CELLAR_STATS); break;
+        case CELLAR_STATS: changeMode(0, CELLAR_STATS_RUN); break;
+        case CELLAR_STATS_RUN: changeMode(0, CELLAR_STATS_IDLE); break;
+        case CELLAR_STATS_IDLE: changeMode(0, CELLAR_SET_TEMP); break;
+        case CELLAR_SET_TEMP: changeMode(0, CELLAR_MAIN); break;
+      }
       break;
 
     default:
@@ -233,12 +351,14 @@ void Cellar::handleButtonUp(int mode) {
   switch(mode) {
     case UP:
       writeConfig();
+      changeMode(1000, CELLAR_MAIN);
       break;
 
     case FIRST:
+      changeMode(0, CELLAR_SET_TEMP);
     case REPEAT:
+      updateNeeded = true;
       config.setTemp++;
-      drawSetTemp(true);
       break;
 
     default:
@@ -250,12 +370,14 @@ void Cellar::handleButtonDn(int mode) {
   switch(mode) {
     case UP:
       writeConfig();
+      changeMode(1000, CELLAR_MAIN);
       break;
 
     case FIRST:
+      changeMode(0, CELLAR_SET_TEMP);
     case REPEAT:
+      updateNeeded = true;
       config.setTemp--;
-      drawSetTemp(true);
       break;
 
     default:
@@ -264,36 +386,42 @@ void Cellar::handleButtonDn(int mode) {
 }
 
 /*!
- * Duration
- *  0s  59s  d < 60
- *  1m  99m  60 <= d < 6000
- * 100  999  6000 <= d < 60,000
- * 16h  99h  60,000 <= d 360,000
- *  4d  99d  360,000 <= d < 8,640,000
- * 14w  99w  8,640,000 <= d < 60,480,000
- *  1y  99y  60,480,000 <= d
+ * Returns a human readable duration in only 3 character.
+ * All have a suffix and two digits, except minutes which is
+ * the most common result and can be three digits with no suffix.
+ *
+ *  0s - 59s | d < 60
+ *  1m - 99m | 60 <= d < 6000
+ * 100 - 999 | 6000 <= d < 60,000
+ * 16h - 99h | 60,000 <= d 360,000
+ *  4d - 99d | 360,000 <= d < 8,640,000
+ * 14w - 99w | 8,640,000 <= d < 60,480,000
+ *  1y - 99y | 60,480,000 <= d
  */
 void Cellar::getDuration3char(int seconds, char *buff) {
   int reduced;
+  const char *pattern;
   if (seconds < 60) {
-    sprintf(buff, "%2ds", seconds);
+    reduced = seconds;
+    pattern = "%2ds";
   } else if (seconds < 6000) {
     reduced = seconds / 60;
-    sprintf(buff, "%2dm", reduced);
+    pattern = "%2dm";
   } else if (seconds < 60000) {
     reduced = seconds / 60;
-    sprintf(buff, "%3d", reduced);
+    pattern = "%3d";
   } else if (seconds < 360000) {
     reduced = seconds / 3600;
-    sprintf(buff, "%2dh", reduced);
+    pattern = "%2dh";
   } else if (seconds < 8640000) {
     reduced = seconds / 86400;
-    sprintf(buff, "%2dd", reduced);
+    pattern = "%2dd";
   } else if (seconds < 60480000) {
     reduced = seconds / 604800;
-    sprintf(buff, "%2dw", reduced);
+    pattern = "%2dw";
   } else {
     reduced = seconds / 31536000;
-    sprintf(buff, "%2dy", reduced);
+    pattern = "%2dy";
   }
+  sprintf(buff, pattern, reduced);
 }
