@@ -12,6 +12,7 @@ set(SOURCE_FILES HIH6130.h HIH6130.cpp)
 set(SOURCE_FILES ButtonInterrupt.h ButtonInterrupt.cpp)
 set(SOURCE_FILES oled_font.h oled_font.cpp)
 set(SOURCE_FILES font_lcd6x8.h font_lcd11x16.h)
+set(SOURCE_FILES Averager.cpp Averager.h)
 add_executable(stat ${SOURCE_FILES})
 
 include_directories("/Users/jsokel/particle/firmware/inc")
