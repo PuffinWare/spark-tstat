@@ -11,6 +11,8 @@
 
 static const int NUM_SENSORS = 4;
 
+//typedef std::function<void(void)> cellar_callback;
+
 // Two magic bytes and the actual value
 static const byte CONFIG_MAGIC[] = {0x1e, 0xe7};
 typedef struct {
@@ -21,11 +23,17 @@ typedef struct {
 
 typedef enum CELLAR_DISPLAY_MODE {
   CELLAR_MAIN, // None specified
-  CELLAR_SET_TEMP,
   CELLAR_STATS,
   CELLAR_STATS_RUN,
   CELLAR_STATS_IDLE,
+  CELLAR_SET_TEMP,
 } CELLAR_DISPLAY_MODE;
+
+typedef enum CELLAR_EDIT_MODE {
+  CELLAR_EDIT_NONE, // None specified
+  CELLAR_EDIT_TEMP,
+  CELLAR_EDIT_HYST,
+} CELLAR_EDIT_MODE;
 
 class Cellar {
 
@@ -37,20 +45,22 @@ private:
   CELLAR_CONFIG config;
   bool enabled;
   bool updateNeeded;
+  CELLAR_DISPLAY_MODE drawMode;
+  CELLAR_DISPLAY_MODE nextMode;
+  CELLAR_EDIT_MODE editMode;
+  bool btnToggle;
+
+  ulong startTime;  //! Time the last transition happened
+  ulong waitTime;
+  bool configChanged;
+  int curDuration;  //! How long in the current state
+
   int curRH;
   int curTemp[NUM_SENSORS];
   int avgTemp;   // the instant average of all the temp sensors
   Averager *histAvgTemp; // historical average over time
-
-  ulong startTime;  //! Time the pump was turned on
-  int curDuration;  //! How long in the current state
   Averager *avgRunTime; //! Average run time for the pump
-  Averager *avgIdleTime; //! Average run time for the pump
-
-  CELLAR_DISPLAY_MODE drawMode;
-  CELLAR_DISPLAY_MODE nextMode;
-  ulong waitTime;     //! Wait time
-  bool btnToggle;
+  Averager *avgIdleTime; //! Average idle time for the pump
 
   font_t* font_lcdSm;
   font_t* font_lcdLg;

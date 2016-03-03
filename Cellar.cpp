@@ -9,19 +9,22 @@
 #include "font_lcd11x16.h"
 #include <functional>
 
-//#define CELLAR_DEBUG 1
+#define CELLAR_DEBUG 1
 #define AVERAGE_CNT 10
 
 Cellar::Cellar() {
   this->enabled = false;
   this->curRH = 0;
+  memset(curTemp, 0, sizeof(int)*NUM_SENSORS);
   this->curDuration = 0;
-  this->waitTime = 1000;
   this->startTime = millis();
+  this->waitTime = startTime + 1500;
   this->btnToggle = false;
   this->updateNeeded = false;
+  this->configChanged = false;
   this->drawMode = CELLAR_MAIN;
   this->nextMode = CELLAR_MAIN;
+  this->editMode = CELLAR_EDIT_NONE;
   this->histAvgTemp = new Averager(AVERAGE_CNT * 2);
   this->avgRunTime = new Averager(AVERAGE_CNT);
   this->avgIdleTime = new Averager(AVERAGE_CNT);
@@ -43,18 +46,18 @@ Cellar::Cellar() {
   this->btnUp = new ButtonInterrupt(D3, 100, std::bind(&Cellar::handleButtonUp, this, _1), 2000, 250);
   this->btnDn = new ButtonInterrupt(D2, 100, std::bind(&Cellar::handleButtonDn, this, _1), 2000, 250);
 
-  // Setup config
+  // Setup config - check for magic bytes since it's not guaranteed to be zero at first
   if (EEPROM.read(0) == CONFIG_MAGIC[0] &&
       EEPROM.read(1) == CONFIG_MAGIC[1]) {
     // valid eeprom data
 #ifdef CELLAR_DEBUG
-    Serial.printlnf("Load config");
+    Serial.println("Load config");
 #endif
     EEPROM.get(2, config);
   } else {
     // needs to be initialized
 #ifdef CELLAR_DEBUG
-    Serial.printlnf("Create config");
+    Serial.println("Create config");
 #endif
     EEPROM.write(0, CONFIG_MAGIC[0]);
     EEPROM.write(1, CONFIG_MAGIC[1]);
@@ -88,9 +91,15 @@ void Cellar::loop() {
   }
 
   if (waitTime > 0 && (millis() > waitTime)) {
+    waitTime = 0;
     updateNeeded = true;
     drawMode = nextMode;
-    waitTime = 0;
+    editMode = CELLAR_EDIT_NONE;
+    if (configChanged) {
+      // Only want to write the config to EEPROM after all updates are done
+      writeConfig();
+      configChanged = false;
+    }
   }
 
   if (updateNeeded) {
@@ -142,6 +151,7 @@ void Cellar::checkTemp() {
 
 void Cellar::enable() {
   enabled = true;
+  updateNeeded = true;
   digitalWrite(D7, HIGH);
   avgIdleTime->addValue(curDuration);
   startTime = millis();
@@ -149,19 +159,21 @@ void Cellar::enable() {
 
 void Cellar::disable() {
   enabled = false;
+  updateNeeded = true;
   digitalWrite(D7, LOW);
   avgRunTime->addValue(curDuration);
   startTime = millis();
 }
 
 void Cellar::draw() {
+
   display->clear(CLEAR_BUFF);
   switch (drawMode) {
     case CELLAR_MAIN: drawMain(); break;
-    case CELLAR_SET_TEMP: drawSetTemp(); break;
     case CELLAR_STATS: drawStats(); break;
     case CELLAR_STATS_IDLE: drawStatsLog(true); break;
     case CELLAR_STATS_RUN: drawStatsLog(false); break;
+    case CELLAR_SET_TEMP: drawSetTemp(); break;
   }
   display->display();
 }
@@ -198,6 +210,7 @@ void Cellar::drawMain() {
   sprintf(tempStr, "%d.%d", tVal, tDec);
   display->writeText(6, 0, tempStr, 4);
 
+  // Individual sensors
   display->setFont(font_lcdSm);
   for (int i=0; i<NUM_SENSORS; i++) {
     tVal = curTemp[i] / 10;
@@ -236,23 +249,31 @@ void Cellar::drawSetTemp() {
   display->setFont(font_lcdSm);
   display->writeText(0, 0, "SET", 0, true);
 
+  // Current temp
+  tVal = avgTemp / 10;
+  tDec = avgTemp % 10;
+  sprintf(tempStr, "%d.%d", tVal, tDec);
+  display->writeText(6, 0, tempStr, 4);
+
+  // Set Temp
+  display->writeText(0, 2, "Temp:", 0, editMode==CELLAR_EDIT_TEMP);
   tVal = config.setTemp / 10;
   tDec = config.setTemp % 10;
   display->setFont(font_lcdLg);
   sprintf(tempStr, "%2d", tVal);
   display->writeText(3, 1, tempStr);
   display->setFont(font_lcdSm);
-  display->writeText(0, 2, "Temp:", 0);
   sprintf(tempStr, "%d", tDec);
   display->writeText(9, 3, tempStr, 3);
 
+  // Set Hysteresis
+  display->writeText(0, 4, "Hyst:", 0, editMode==CELLAR_EDIT_HYST);
   tVal = config.hysteresis / 10;
   tDec = config.hysteresis % 10;
   display->setFont(font_lcdLg);
   sprintf(tempStr, "%2d", tVal);
   display->writeText(3, 2, tempStr);
   display->setFont(font_lcdSm);
-  display->writeText(0, 4, "Hyst:", 0);
   sprintf(tempStr, "%d", tDec);
   display->writeText(9, 5, tempStr, 3);
 }
@@ -281,10 +302,10 @@ void Cellar::drawStats() {
     display->writeText(7, 2, tempStr, 4, false);
   }
 
-  display->writeText(0, 3, "Max");
-  getDuration3char(avgRunTime->getMax(), tempStr);
+  display->writeText(0, 3, "Lst");
+  getDuration3char(avgRunTime->getLast(), tempStr);
   display->writeText(4, 3, tempStr);
-  getDuration3char(avgIdleTime->getMax(), tempStr);
+  getDuration3char(avgIdleTime->getLast(), tempStr);
   display->writeText(7, 3, tempStr, 4);
 
   display->writeText(0, 4, "Avg");
@@ -293,10 +314,10 @@ void Cellar::drawStats() {
   getDuration3char(avgIdleTime->getAverage(), tempStr);
   display->writeText(7, 4, tempStr, 4);
 
-  display->writeText(0, 5, "Lst");
-  getDuration3char(avgRunTime->getLast(), tempStr);
+  display->writeText(0, 5, "Max");
+  getDuration3char(avgRunTime->getMax(), tempStr);
   display->writeText(4, 5, tempStr);
-  getDuration3char(avgIdleTime->getLast(), tempStr);
+  getDuration3char(avgIdleTime->getMax(), tempStr);
   display->writeText(7, 5, tempStr, 4);
 }
 
@@ -314,8 +335,6 @@ void Cellar::drawStatsLog(bool idle) {
 
   display->setFont(font_lcdSm);
   display->writeText(0, 0, idle?"IDLE":"RUN", 0, true);
-  display->writeText(6, 0, "Pg:");
-  display->writeText(9, 0, "1");
   for (int i=0; i<2; i++) {
     for (int j=0; j<5; j++) {
       getDuration3char(source->getValue(i*5+j), tempStr);
@@ -327,19 +346,19 @@ void Cellar::drawStatsLog(bool idle) {
 void Cellar::handleButtonHome(int mode) {
   switch(mode) {
     case UP:
-      changeMode(10000, CELLAR_MAIN); break;
+      changeMode(10000, CELLAR_MAIN);
       break;
 
     case FIRST:
     case REPEAT:
-      updateNeeded = true;
-      switch(drawMode) {
-        case CELLAR_MAIN: changeMode(0, CELLAR_STATS); break;
-        case CELLAR_STATS: changeMode(0, CELLAR_STATS_RUN); break;
-        case CELLAR_STATS_RUN: changeMode(0, CELLAR_STATS_IDLE); break;
-        case CELLAR_STATS_IDLE: changeMode(0, CELLAR_SET_TEMP); break;
-        case CELLAR_SET_TEMP: changeMode(0, CELLAR_MAIN); break;
+      if (drawMode == CELLAR_SET_TEMP) {
+        switch(editMode) {
+          case CELLAR_EDIT_NONE: editMode=CELLAR_EDIT_TEMP; break;
+          case CELLAR_EDIT_TEMP: editMode=CELLAR_EDIT_HYST; break;
+          case CELLAR_EDIT_HYST: editMode=CELLAR_EDIT_NONE; break;
+        }
       }
+      updateNeeded = true;
       break;
 
     default:
@@ -350,15 +369,28 @@ void Cellar::handleButtonHome(int mode) {
 void Cellar::handleButtonUp(int mode) {
   switch(mode) {
     case UP:
-      writeConfig();
-      changeMode(1000, CELLAR_MAIN);
+      changeMode(10000, CELLAR_MAIN);
       break;
 
     case FIRST:
-      changeMode(0, CELLAR_SET_TEMP);
     case REPEAT:
+      if (drawMode == CELLAR_SET_TEMP && editMode != CELLAR_EDIT_NONE) {
+        switch(editMode) {
+          case CELLAR_EDIT_TEMP: config.setTemp++; break;
+          case CELLAR_EDIT_HYST: config.hysteresis++; break;
+        }
+        configChanged = true;
+      } else {
+        switch(drawMode) {
+          case CELLAR_MAIN: changeMode(0, CELLAR_SET_TEMP); break;
+          case CELLAR_STATS: changeMode(0, CELLAR_MAIN); break;
+          case CELLAR_STATS_RUN: changeMode(0, CELLAR_STATS); break;
+          case CELLAR_STATS_IDLE: changeMode(0, CELLAR_STATS_RUN); break;
+          case CELLAR_SET_TEMP: changeMode(0, CELLAR_STATS_IDLE); break;
+        }
+      }
+
       updateNeeded = true;
-      config.setTemp++;
       break;
 
     default:
@@ -367,17 +399,31 @@ void Cellar::handleButtonUp(int mode) {
 }
 
 void Cellar::handleButtonDn(int mode) {
+
   switch(mode) {
     case UP:
-      writeConfig();
-      changeMode(1000, CELLAR_MAIN);
+      changeMode(10000, CELLAR_MAIN);
       break;
 
     case FIRST:
-      changeMode(0, CELLAR_SET_TEMP);
     case REPEAT:
+      if (drawMode == CELLAR_SET_TEMP && editMode != CELLAR_EDIT_NONE) {
+        switch(editMode) {
+          case CELLAR_EDIT_TEMP: config.setTemp--; break;
+          case CELLAR_EDIT_HYST: config.hysteresis--; break;
+        }
+        configChanged = true;
+      } else {
+        switch(drawMode) {
+          case CELLAR_MAIN: changeMode(0, CELLAR_STATS); break;
+          case CELLAR_STATS: changeMode(0, CELLAR_STATS_RUN); break;
+          case CELLAR_STATS_RUN: changeMode(0, CELLAR_STATS_IDLE); break;
+          case CELLAR_STATS_IDLE: changeMode(0, CELLAR_SET_TEMP); break;
+          case CELLAR_SET_TEMP: changeMode(0, CELLAR_MAIN); break;
+        }
+      }
+
       updateNeeded = true;
-      config.setTemp--;
       break;
 
     default:
