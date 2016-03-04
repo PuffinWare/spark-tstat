@@ -9,7 +9,7 @@
 #include "font_lcd11x16.h"
 #include <functional>
 
-#define CELLAR_DEBUG 1
+//#define CELLAR_DEBUG 1
 #define AVERAGE_CNT 10
 
 Cellar::Cellar() {
@@ -335,6 +335,10 @@ void Cellar::drawStatsLog(bool idle) {
 
   display->setFont(font_lcdSm);
   display->writeText(0, 0, idle?"IDLE":"RUN", 0, true);
+  if ((!idle && enabled) || (idle && !enabled)) {
+    getDuration3char(curDuration, tempStr);
+    display->writeText(6, 0, tempStr);
+  }
   for (int i=0; i<2; i++) {
     for (int j=0; j<5; j++) {
       getDuration3char(source->getValue(i*5+j), tempStr);
