@@ -11,7 +11,9 @@ public:
   int getAverage() { return curSize == 0 ? 0 : average; }
   int getLast() { return curSize == 0 ? 0 : last; }
   int getMax()  { return max; }
-  bool addValue(int value);
+  int getMin()  { return min; }
+  void reset()  { max = average; min = average; }
+  void addValue(int value);
   bool isFull() { return curSize == maxSize; }
   int getValue(int idx) const { return values[idx]; }
 
@@ -19,11 +21,10 @@ private:
   int *values;
   int maxSize;
   int curSize;
-  int idx;
   int average;
   int last;
   int max;
-
+  int min;
 };
 
 #endif // AVERAGER_H

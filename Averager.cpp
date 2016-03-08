@@ -8,11 +8,11 @@ Averager::Averager(int size) {
   values = (int*)malloc(sizeof(int) * size);
   memset(values, 0, sizeof(int) * size);
   curSize = 0;
-  idx = 0;
   max = 0;
+  min = 0;
 }
 
-bool Averager::addValue(int value) {
+void Averager::addValue(int value) {
   curSize += curSize==maxSize ? 0 : 1;
   // Want values pushed in for historical display
   for (int i=curSize-1; i>0; i--) {
@@ -20,17 +20,15 @@ bool Averager::addValue(int value) {
   }
   values[0] = value;
   last = value;
-  if (value > max) {
+  if (curSize == 1 || value > max) {
     max = value;
   }
-  idx++;
-  if (idx == maxSize) {
-    idx = 0;
+  if (curSize == 1 || value < min) {
+    min = value;
   }
   int total = 0;
   for (int i=0; i<curSize; i++) {
     total += values[i];
   }
   average = total / curSize;
-  return curSize == maxSize;
 }
