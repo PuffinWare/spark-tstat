@@ -236,7 +236,7 @@ void Cellar::drawMain() {
   drawReading(avgTemp, 3, 0);
 
   // Current RH
-  display->writeText(0, 2, "RH:");
+  display->writeText(2, 2, "RH:");
   drawReading(curRH, 3, 1);
 
   // Set temp
@@ -269,7 +269,7 @@ void Cellar::drawReading(int value, int x, int y, int yOffset, bool invert) {
   tVal = value / 10;
   tDec = value % 10;
   display->setFont(font_lcdLg);
-  sprintf(tempStr, "%d", tVal);
+  sprintf(tempStr, "%2d", tVal);
   display->writeText(x, y, tempStr);
   display->setFont(font_lcdSm);
   sprintf(tempStr, "%d", tDec);
