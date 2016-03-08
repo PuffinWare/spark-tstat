@@ -23,6 +23,7 @@ typedef struct {
 
 typedef enum CELLAR_DISPLAY_MODE {
   CELLAR_MAIN, // None specified
+  CELLAR_TEMPS,
   CELLAR_STATS,
   CELLAR_STATS_RUN,
   CELLAR_STATS_IDLE,
@@ -52,6 +53,7 @@ private:
 
   ulong startTime;  //! Time the last transition happened
   ulong waitTime;
+  ulong spinTime;
   bool configChanged;
   int curDuration;  //! How long in the current state
 
@@ -76,13 +78,16 @@ private:
   void changeMode(ulong wait, CELLAR_DISPLAY_MODE next);
   void getTemp();
   void checkTemp();
+  void checkSpinner(ulong now);
   void enable();
   void disable();
   void draw();
   void drawMain();
+  void drawTemps();
   void drawSetTemp();
   void drawStats();
   void drawStatsLog(bool idle);
+  void drawReading(int value, int x, int y, int yOffset=0, bool invert=false);
   void handleButtonHome(int mode);
   void handleButtonUp(int mode);
   void handleButtonDn(int mode);
