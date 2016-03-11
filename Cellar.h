@@ -11,10 +11,6 @@
 
 static const int NUM_SENSORS = 4;
 
-//typedef std::function<void(void)> cellar_callback;
-
-// Two magic bytes and the actual value
-static const byte CONFIG_MAGIC[] = {0x1e, 0xe7};
 typedef struct {
   int version;    // config version
   int setTemp;
@@ -53,7 +49,9 @@ private:
 
   ulong startTime;  //! Time the last transition happened
   ulong waitTime;
-  ulong spinTime;
+  ulong spinTime;   //! When to change spin character
+  ulong breatheTime; //! When to change breath duty cycle
+  int breatheMode;   //! Duty cycle
   bool configChanged;
   int curDuration;  //! How long in the current state
 
@@ -79,6 +77,7 @@ private:
   void getTemp();
   void checkTemp();
   void checkSpinner(ulong now);
+  void checkBreatheLed(ulong now);
   void enable();
   void disable();
   void draw();
@@ -88,10 +87,12 @@ private:
   void drawStats();
   void drawStatsLog(bool idle);
   void drawReading(int value, int x, int y, int yOffset=0, bool invert=false);
+  void drawReadingSmall(int value, int x, int y, int xOffset=0, bool invert=false);
+  void drawDuration3char(int seconds, int x, int y, int xOffset=0, bool invert=false);
   void handleButtonHome(int mode);
   void handleButtonUp(int mode);
   void handleButtonDn(int mode);
-  void getDuration3char(int seconds, char *buff);
+//  void getDuration3char(int seconds, char *buff);
 };
 
 #endif //STAT_CELLAR_H
