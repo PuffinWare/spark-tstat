@@ -15,8 +15,8 @@
 #define OUTPUT_LED      A0
 #define OUTPUT_RELAY    D6
 #define SPIN_DELAY     250 // 180deg spin per second
-#define BREATHE_DELAY   32 // 32 ms, 8 point increment
-#define BREATHE_STEP     8 // = ~32 updates per second
+#define BREATHE_DELAY   25 // 25 ms, 4 point increment
+#define BREATHE_STEP     4 // = ~1.5 seconds per breath
 
 // Two magic bytes that would not be default values
 static const byte CONFIG_MAGIC[] = { 0x1e, 0xe7 };
@@ -198,11 +198,12 @@ void Cellar::checkBreatheLed(ulong now){
   }
 
   breatheTime = now + BREATHE_DELAY;
-  breatheMode += 8; // 32 steps between 0 and 255
+  breatheMode += BREATHE_STEP;
   if (breatheMode > 255) {
     breatheMode = -255;
   }
-  analogWrite(OUTPUT_LED, abs(breatheMode));
+  int dutyCycle = abs(breatheMode);
+  analogWrite(OUTPUT_LED, dutyCycle<10 ? 10 : dutyCycle);
 }
 
 void Cellar::enable() {
