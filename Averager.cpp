@@ -5,11 +5,11 @@
 
 Averager::Averager(int size) {
   maxSize = size;
-  values = (int*)malloc(sizeof(int) * size);
-  memset(values, 0, sizeof(int) * size);
   curSize = 0;
   max = 0;
   min = 0;
+  values = (int*)malloc(sizeof(int) * size);
+  memset(values, 0, sizeof(int) * size);
 }
 
 void Averager::addValue(int value) {
@@ -19,7 +19,6 @@ void Averager::addValue(int value) {
     values[i] = values[i-1];
   }
   values[0] = value;
-  last = value;
   if (curSize == 1 || value > max) {
     max = value;
   }

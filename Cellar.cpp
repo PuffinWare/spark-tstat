@@ -94,6 +94,7 @@ Cellar::Cellar() {
 
 void Cellar::writeConfig() {
   EEPROM.put(2, config);
+  configChanged = false;
 }
 
 void Cellar::loop() {
@@ -104,7 +105,7 @@ void Cellar::loop() {
   btnUp->poll();
   btnDn->poll();
   hih->poll();
-  if (ds18b20->poll()) {
+  if (ds18b20->poll()) { // update after all the reading work is done.
     getTemp();
     checkTemp();
     updateNeeded = true;
@@ -118,17 +119,18 @@ void Cellar::loop() {
     if (configChanged) {
       // Only want to write the config to EEPROM after all updates are done
       writeConfig();
-      configChanged = false;
     }
   }
 
   if (updateNeeded) {
+    // Drawing the screen takes a decent amount of time and we have a lot
+    // of work to do reading all the sensors. Only update when needed.
     updateNeeded = false;
     draw();
   }
 
-  // These will update outside of the "updateNeeded" cycle
   if (enabled) {
+    // These will change outside of the "updateNeeded" cycle
     checkSpinner(now);
     checkBreatheLed(now);
   }
