@@ -31,8 +31,6 @@ Cellar::Cellar() {
   this->startTime = millis();
   this->waitTime = startTime + 1500;
   this->spinTime = startTime;
-  this->breatheTime = startTime;
-  this->breatheMode = 0;
   this->btnToggle = false;
   this->updateNeeded = false;
   this->configChanged = false;
@@ -49,21 +47,17 @@ Cellar::Cellar() {
   this->display = new OledDisplay(A7, A6, A2);
   this->display->begin();
 
-  // update every 500ms, adjust -0.5deg
-  this->hih = new HIH6130(0x27, 500);
+  this->hih = new HIH6130(0x27, 500);  // update every 500ms
 
   this->ds2482 = new DS2482();
   this->ds18b20 = new DS18B20(this->ds2482, 500);
+  this->breather = new Breather(OUTPUT_LED, BREATHE_STEP, BREATHE_DELAY);
 
   using namespace std::placeholders;
   this->btnHome = new ButtonInterrupt(D4, 100, std::bind(&Cellar::handleButtonHome, this, _1), 2000, 250);
   this->btnUp = new ButtonInterrupt(D3, 100, std::bind(&Cellar::handleButtonUp, this, _1), 2000, 250);
   this->btnDn = new ButtonInterrupt(D2, 100, std::bind(&Cellar::handleButtonDn, this, _1), 2000, 250);
 
-  pinMode(D7, OUTPUT);
-  digitalWrite(D7, LOW);
-  pinMode(OUTPUT_LED, OUTPUT);
-  digitalWrite(OUTPUT_LED, LOW);
   pinMode(OUTPUT_RELAY, OUTPUT);
   digitalWrite(OUTPUT_RELAY, LOW);
 
@@ -132,7 +126,7 @@ void Cellar::loop() {
   if (enabled) {
     // These will change outside of the "updateNeeded" cycle
     checkSpinner(now);
-    checkBreatheLed(now);
+    breather->loop(now);
   }
 }
 
@@ -194,41 +188,25 @@ void Cellar::checkSpinner(ulong now) {
   display->writeCharToDisplay(1, 4, spinChar);
 }
 
-void Cellar::checkBreatheLed(ulong now){
-  if (now < breatheTime) {
-    return;
-  }
-
-  breatheTime = now + BREATHE_DELAY;
-  breatheMode += BREATHE_STEP;
-  if (breatheMode > 255) {
-    breatheMode = -255;
-  }
-  int dutyCycle = abs(breatheMode);
-  analogWrite(OUTPUT_LED, dutyCycle<10 ? 10 : dutyCycle);
-}
-
 void Cellar::enable() {
   enabled = true;
   updateNeeded = true;
+  breather->enable();
   avgIdleTime->addValue(curDuration);
   startTime = millis();
   spinTime = startTime + SPIN_DELAY;
   spinner[1] = '|';
   digitalWrite(OUTPUT_RELAY, HIGH);
-  digitalWrite(D7, HIGH);
-  breatheMode = 0;
 }
 
 void Cellar::disable() {
   enabled = false;
   updateNeeded = true;
+  breather->disable();
   avgRunTime->addValue(curDuration);
   startTime = millis();
   spinner[1] = '*';
   digitalWrite(OUTPUT_RELAY, LOW);
-  digitalWrite(OUTPUT_LED, LOW);
-  digitalWrite(D7, LOW);
 }
 
 void Cellar::draw() {

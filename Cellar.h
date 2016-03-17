@@ -8,6 +8,7 @@
 #include "ButtonInterrupt.h"
 #include "OledDisplay.h"
 #include "Averager.h"
+#include "Breather.h"
 
 static const int NUM_SENSORS = 4;
 
@@ -50,8 +51,6 @@ private:
   ulong startTime;  //! Time the last transition happened
   ulong waitTime;
   ulong spinTime;   //! When to change spin character
-  ulong breatheTime; //! When to change breath duty cycle
-  int breatheMode;   //! Duty cycle
   bool configChanged;
   int curDuration;  //! How long in the current state
 
@@ -71,13 +70,13 @@ private:
   ButtonInterrupt *btnHome;
   ButtonInterrupt *btnUp;
   ButtonInterrupt *btnDn;
+  Breather *breather;
 
   void writeConfig();
   void changeMode(ulong wait, CELLAR_DISPLAY_MODE next);
   void getTemp();
   void checkTemp();
   void checkSpinner(ulong now);
-  void checkBreatheLed(ulong now);
   void enable();
   void disable();
   void draw();
@@ -92,7 +91,6 @@ private:
   void handleButtonHome(int mode);
   void handleButtonUp(int mode);
   void handleButtonDn(int mode);
-//  void getDuration3char(int seconds, char *buff);
 };
 
 #endif //STAT_CELLAR_H
