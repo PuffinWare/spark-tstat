@@ -4,6 +4,7 @@
 #include <spark_wiring_eeprom.h>
 #include <spark_wiring_usbserial.h>
 
+#include "cellar_util.h"
 #include "oled_font.h"
 #include "font_lcd6x8.h"
 #include "font_lcd11x16.h"
@@ -47,10 +48,10 @@ Cellar::Cellar() {
   this->display = new OledDisplay(A7, A6, A2);
   this->display->begin();
 
-  this->hih = new HIH6130(0x27, 500);  // update every 500ms
+  this->hih = new HIH6130(0x27, 5000);  // update every 5s
 
   this->ds2482 = new DS2482();
-  this->ds18b20 = new DS18B20(this->ds2482, 500);
+  this->ds18b20 = new DS18B20(this->ds2482, 1000);
   this->breather = new Breather(OUTPUT_LED, BREATHE_STEP, BREATHE_DELAY);
 
   using namespace std::placeholders;
@@ -98,7 +99,11 @@ void Cellar::loop() {
   btnHome->poll();
   btnUp->poll();
   btnDn->poll();
-  hih->poll();
+  if (hih->poll()) {
+// Don't trust the HIH temp anymore
+//  curTemp = hih->getTempF();
+    curRH = hih->getRH();
+  }
   if (ds18b20->poll()) { // update after all the reading work is done.
     getTemp();
     checkTemp();
@@ -136,11 +141,7 @@ void Cellar::changeMode(ulong wait, CELLAR_DISPLAY_MODE next) {
 }
 
 void Cellar::getTemp() {
-// Don't trust the HIH temp anymore
-//  curTemp = hih->getTempF();
-  curRH = hih->getRH();
-
-  // The curTemp is now the average of all four sensors
+  // The curTemp is now the average of all four 1W sensors
   avgTemp = 0;
   for (int i=0; i<NUM_SENSORS; i++) {
     curTemp[i] = ds18b20->getTempF(i);
@@ -154,6 +155,10 @@ void Cellar::getTemp() {
 #endif
 }
 
+/*!
+ * Will trigger the relay only when the running average passes the threshold
+ * to ensure small temp fluctuations do not enable/disable rapidly
+ */
 void Cellar::checkTemp() {
   if (!histAvgTemp->isFull()) {
     return;
